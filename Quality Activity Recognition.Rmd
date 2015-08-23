@@ -1,0 +1,118 @@
+---
+title: "Quality Activity Recognition"
+author: "Jason Miller"
+geometry: margin=1.6cm
+output:
+  html_document: default
+  pdf_document:
+    fig_caption: yes
+fontsize: 11pt
+---
+###Introduction
+
+The goal is to predict the quality of a weight lifting exercise based off of various measurements taken from four sensors. Measurements were made from four sensors (wrist, arm, belt, and dumbbell). Accelerometer, gyroscope. and magnetometer readings were taken and then used to compute the roll, pitch and yaw for each sensor at a given time. In addition eight various sample statistics were computed for each Euler angle and each sensor. Participants performed a weightlifting exercise in proper form and also performed four common incorrect variants of the exercise. The goal is to build a classification model which predicts which variant of the exercise that has been performed using the readings from the sensors. 
+
+
+
+ 
+###Data Cleaning and Feature Selection
+
+Upon looking at the file in Excel, and reading the documentation for the data, we see that the first seven columns do not involve any actual measurements but only metadata. We also see that there are certain rows that correspond to a new window. Let's remove these rows. Therefore we remove about 400 of these rows from the data set and we remove the 1st seven columns. 
+
+The columns involving the summary statistics variables involve many NA values. It seems that we should be able to use the raw measurements themselves as predictors. This will also allow us to get rid of all of these NA values by removing the summary statistics columns. This takes us from 152 features to 52 features. The plan is to build a predictive model using the random forest algorithm. This algorithm is often difficult to interpret because it uses an ensemble of trees to make predictions. Interpretability can be improved if we can cut down to a smaller set of features. 
+
+Instead of using the raw measurements from the accelerometer, gyrcoscope and magnetometer, we can use the calculated Euler angles and the total acceleration for each of the four sensors. We will use these 16 features since they should contain most of the necessary information about the movement type.
+
+
+```{r}
+
+HAR<-read.csv("pml-training.csv")
+#remove summary rows
+HAR<-HAR[HAR$new_window=="no",]
+#remove 1st seven rows that are not real measurements
+HAR<-subset(HAR,select=-(1:7))
+#get rid of summary statistic columns
+HAR<-subset(HAR,select=-c(5:29,43:52,62:76,80:94,96:105,118:132,134:143))
+#keep only roll,pitch,yaw and total accel for 4 sensors for total of 16 predictors
+HAR<-subset(HAR,select=c(1:4,14:17,27:30,40:43,53))
+names(HAR)
+```
+
+###Builing the Model
+
+We use the caret package to build our model. First we create a training and testing set. We use 75% of our data for the training set and remaining 25% for the training set. 
+
+```{r}
+library(caret)
+set.seed(100)
+#create training and testing sets
+inTrain<-createDataPartition(y=HAR$classe,p=.75,list=FALSE)
+training<-HAR[inTrain,]
+testing<-HAR[-inTrain,]
+dim(training);dim(testing)
+```
+
+We will build a model using the random forest algorithm. By default this method will build 500 trees using bootstrapped data sets. Then these 500 trees will be averaged to produce a single model. Furthermore at each split, the random forest will consider a random subset of variables on which to split. In our case, we use the following values for the tuning parameter mtry: 2,3,4,5,10,15. 
+
+```{r,cache=TRUE}
+#train the model.
+library(caret)
+#Specify tuning parameters for random forest. 
+mtry<-c(2,3,4,5,10,15)
+
+model_file<-"HARrfmod2.rds"
+if (file.exists(model_file)){
+        #read model in and assign it to rfmod2.
+        rfmod2<-readRDS(model_file)
+        } else {
+                #if file does not exist, train and build model.
+                rfmod2<-rfmod2<-train(classe~.,data=training,method="rf",trControl=trainControl(method="repeatedcv",number=10,repeats=3),
+              prox=TRUE,tune.Grid=as.data.frame(mtry)) 
+        }
+rfmod2
+#Number of minutes the algorithm took to build!
+rfmod2$time$everything[3]/(60)
+   
+```
+
+The final model is built using mtry=5. Here our accuracy is estimated to be .9890612 and kappa is estimated to be .9861620 by using repeated 10-fold cross validation three separate times. These serve as our estimate for the out of sample error of our model.
+We can plot the accuracy across our tuning parameters.
+
+
+```{r}
+ggplot(rfmod2)
+```
+
+We can see which variables were most important in our model. 
+
+```{r}
+rf2varimp<-varImp(rfmod2)
+plot(rf2varimp)
+```
+
+It seems the readings from the belt sensor were the most important. The graph also suggests that there are three features which could probabaly be removed without significantly degrading our predicition accuracy.
+Now we can use our model to make predictions on our test set. 
+
+```{r,cache=TRUE}
+#obtain predictions of our model on the test set. 
+rfpred2<-predict(rfmod2,testing)
+#create confusion matrix
+crf2<-confusionMatrix(testing$classe,rfpred2)
+crf2
+
+```
+
+We only misclassify 10 exercises in the test set. The out of sample error is given by the accuracy and kappa. Our accuracy is .9979 and our kappa is .9974, both slightly better than our estimates obtained from using cross validation with our random forest model. 
+
+###Summary
+
+We built a random forest model to classify the quality of an exercise based off of sensor readings. 
+
+Pros: Our model did a very good job of predicting the correct class. Our out of sample error was extremely high on a held out test set of 4802 samples. 
+
+Cons: Random forest models are very difficult to interpret since they involve averages of trees which were built using random selection of variables at each split. Cutting down the enormous number of features to just 16 helped our model be a little more understandable. 
+
+This model took over seven and a half hours to build. This could have likely been made shorter by using growing fewer trees before averaging them. It is also likely that 5-fold cross validation would have been good enough. Regardless, random forest models are very computationally expensive. Ideally one could try out some simpler and more interpretable models first to see if the full power of random forests was really needed to get the kind of predictive accuracy that we obtained. 
+
+ 
+
