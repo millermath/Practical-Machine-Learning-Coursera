@@ -8,7 +8,10 @@ output:
     fig_caption: yes
 fontsize: 11pt
 ---
+please go to the following link for the compiled html version: http://millermath.github.io/Practical-Machine-Learning-Coursera/Quality_Activity_Recognition.html
+
 ###Introduction
+
 
 The goal is to predict the quality of a weight lifting exercise based off of various measurements taken from four sensors. Measurements were made from four sensors (wrist, arm, belt, and dumbbell). Accelerometer, gyroscope. and magnetometer readings were taken and then used to compute the roll, pitch and yaw for each sensor at a given time. In addition eight various sample statistics were computed for each Euler angle and each sensor. Participants performed a weightlifting exercise in proper form and also performed four common incorrect variants of the exercise. The goal is to build a classification model which predicts which variant of the exercise that has been performed using the readings from the sensors. 
 
